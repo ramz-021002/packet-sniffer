@@ -43,36 +43,6 @@ Setup:
 
 The workflow dynamically sets Vite `base` to `/<repo-name>/`.
 
-### 2) Cloudflare Pages / Workers Platform
-
-This project includes [`wrangler.toml`](wrangler.toml) with `pages_build_output_dir = "./dist"`.
-
-Target deployment for this repo:
-
-- Cloudflare Pages project: `packetsinffer`
-- Custom domain: `packetsinffer.ramaparnandi.com`
-
-Build and deploy:
-
-```bash
-npm run build
-npm run deploy:cloudflare:packetsinffer
-```
-
-Before deployment, authenticate once:
-
-```bash
-npx wrangler login
-```
-
-Attach the custom domain in Cloudflare:
-
-1. Open Cloudflare Dashboard -> Workers & Pages -> `packetsinffer`.
-2. Go to `Custom domains` -> `Set up a custom domain`.
-3. Enter `packetsinffer.ramaparnandi.com`.
-4. Confirm DNS record creation when prompted (proxied DNS in the same Cloudflare zone).
-5. Wait for SSL provisioning to finish, then the subdomain will serve the app.
-
 ## Parser Scope
 
 Current parser support:
@@ -94,4 +64,3 @@ Not yet supported:
 - `npm run build`: production build
 - `npm run build:gh`: GitHub Pages-oriented build (uses `VITE_BASE_PATH`)
 - `npm run preview`: preview production build locally
-- `npm run deploy:cloudflare`: deploy `dist/` to Cloudflare Pages
