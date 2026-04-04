@@ -9,8 +9,8 @@
     "build:gh": "tsc -b && vite build --base=${VITE_BASE_PATH:-/}",
     "lint": "eslint .",
     "preview": "vite preview",
-    "deploy:cloudflare": "wrangler pages deploy dist",
-    "deploy:cloudflare:packet-sniffer": "wrangler pages deploy dist --project-name packet-sniffer"
+    "deploy:cloudflare": "npx wrangler pages deploy dist",
+    "deploy:cloudflare:packet-sniffer": "npx wrangler pages deploy dist --project-name packet-sniffer"
   },
   "dependencies": {
     "cytoscape": "^3.33.1",
