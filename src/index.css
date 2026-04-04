@@ -1,0 +1,37 @@
+:root {
+  --sans: 'Space Grotesk', 'Avenir Next', sans-serif;
+  --heading: 'Sora', 'Space Grotesk', sans-serif;
+  --mono: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  --text: #1e293b;
+  --text-strong: #020617;
+  --bg: #f1f5f9;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--sans);
+  color: var(--text);
+  background:
+    radial-gradient(circle at 92% 4%, rgba(186, 230, 253, 0.55), transparent 42%),
+    radial-gradient(circle at 0% 90%, rgba(187, 247, 208, 0.65), transparent 35%),
+    linear-gradient(160deg, #f8fafc 0%, #e2e8f0 100%);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+h1,
+h2,
+strong {
+  color: var(--text-strong);
+  font-family: var(--heading);
+}
