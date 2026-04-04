@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "deploy:cloudflare": "wrangler pages deploy dist",
-    "deploy:cloudflare:packetsinffer": "wrangler pages deploy dist --project-name packetsinffer"
+    "deploy:cloudflare:packet-sniffer": "wrangler pages deploy dist --project-name packet-sniffer"
   },
   "dependencies": {
     "cytoscape": "^3.33.1",
