@@ -24,11 +24,13 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 20.20.2
           cache: npm
 
-      - name: Install Dependencies
-        run: npm ci
+      - name: Clean Install
+        run: |
+          rm -rf node_modules package-lock.json
+          npm install
 
       - name: Set Vite Base Path
         run: echo "VITE_BASE_PATH=/${GITHUB_REPOSITORY#*/}/" >> $GITHUB_ENV
