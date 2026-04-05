@@ -41,8 +41,6 @@ Setup:
 2. In GitHub repo settings, enable Pages and select `GitHub Actions` as source.
 3. The workflow builds and deploys `dist/` automatically.
 
-The workflow dynamically sets Vite `base` to `/<repo-name>/`.
-
 ## Parser Scope
 
 Current parser support:
