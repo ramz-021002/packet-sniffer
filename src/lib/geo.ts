@@ -125,45 +125,91 @@ async function fetchFromIpWhoIs(ip: string): Promise<GeoDetails | null> {
   }
 }
 
+async function fetchFromIpInfo(ip: string): Promise<GeoDetails | null> {
+  const response = await fetch(`https://ipinfo.io/${ip}/json`, {
+    signal: AbortSignal.timeout(5000),
+  })
+
+  if (!response.ok) {
+    throw new Error(`ipinfo.io HTTP ${response.status}`)
+  }
+
+  const data = (await response.json()) as {
+    ip?: string
+    city?: string
+    region?: string
+    country?: string
+    org?: string
+    timezone?: string
+    hostname?: string
+    bogon?: boolean
+  }
+
+  if (data.bogon) {
+    throw new Error('ipinfo.io reported bogon address')
+  }
+
+  return {
+    ip: data.ip || ip,
+    isp: data.org || 'Unknown ISP',
+    org: data.org,
+    domain: data.hostname,
+    country: data.country,
+    city: data.city,
+    region: data.region,
+    timezone: data.timezone,
+    status: 'success',
+  }
+}
+
 export async function fetchGeoDetails(ip: string): Promise<GeoDetails> {
-  if (isPrivateOrReservedIp(ip)) {
+  const normalizedIp = ip.trim()
+
+  if (isPrivateOrReservedIp(normalizedIp)) {
     return {
-      ip,
+      ip: normalizedIp,
       status: 'fail',
       isp: 'Private/Local Network',
     }
   }
 
-  if (geoCache.has(ip)) {
-    const cached = geoCache.get(ip)
+  if (geoCache.has(normalizedIp)) {
+    const cached = geoCache.get(normalizedIp)
     return cached as GeoDetails
   }
 
   const result: GeoDetails = {
-    ip,
+    ip: normalizedIp,
     status: 'loading',
   }
 
   const providers: Array<(address: string) => Promise<GeoDetails | null>> = [
     fetchFromIpApiCo,
     fetchFromIpWhoIs,
+    fetchFromIpInfo,
   ]
+  const providerErrors: string[] = []
 
   try {
     for (const provider of providers) {
       try {
-        const providerResult = await provider(ip)
+        const providerResult = await provider(normalizedIp)
         if (providerResult?.status === 'success') {
-          geoCache.set(ip, providerResult)
+          geoCache.set(normalizedIp, providerResult)
           return providerResult
         }
-      } catch {
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown provider error'
+        providerErrors.push(message)
         // Try next provider.
       }
     }
 
     result.status = 'fail'
-    result.isp = 'Lookup failed'
+    result.isp =
+      providerErrors.length > 0
+        ? `Lookup failed for all providers (${providerErrors[0]})`
+        : 'Lookup failed for all providers'
   } catch (error) {
     result.status = 'fail'
     result.isp = 'Lookup failed'
@@ -172,7 +218,6 @@ export async function fetchGeoDetails(ip: string): Promise<GeoDetails> {
     }
   }
 
-  geoCache.set(ip, result)
   return result
 }
 
