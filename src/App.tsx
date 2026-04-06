@@ -320,37 +320,40 @@ function App() {
       <header className="hero-banner">
         <div className="hero-top">
           <p className="eyebrow">Analyze Network Traffic</p>
-          <div className="theme-switch" role="group" aria-label="Color theme">
-            <button
-              type="button"
-              className={theme === 'light' ? 'is-active' : ''}
-              aria-pressed={theme === 'light'}
-              onClick={() => setUiTheme('light')}
+          <div className="hero-actions">
+            <div className="theme-switch" role="group" aria-label="Color theme">
+              <button
+                type="button"
+                className={theme === 'light' ? 'is-active' : ''}
+                aria-pressed={theme === 'light'}
+                onClick={() => setUiTheme('light')}
+              >
+                Light
+              </button>
+              <button
+                type="button"
+                className={theme === 'dark' ? 'is-active' : ''}
+                aria-pressed={theme === 'dark'}
+                onClick={() => setUiTheme('dark')}
+              >
+                Dark
+              </button>
+            </div>
+
+            <a
+              className="github-link"
+              href="https://github.com/ramz-021002/packet-sniffer"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="View packet-sniffer repository on GitHub"
             >
-              Light
-            </button>
-            <button
-              type="button"
-              className={theme === 'dark' ? 'is-active' : ''}
-              aria-pressed={theme === 'dark'}
-              onClick={() => setUiTheme('dark')}
-            >
-              Dark
-            </button>
+              <GitHubMark />
+              <span className="github-link__content">
+                <span className="github-link__label">View on GitHub</span>
+                <span className="github-link__repo">github.com/ramz-021002/packet-sniffer</span>
+              </span>
+            </a>
           </div>
-          <a
-            className="github-link"
-            href="https://github.com/ramz-021002/packet-sniffer"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="View packet-sniffer repository on GitHub"
-          >
-            <GitHubMark />
-            <span className="github-link__content">
-              <span className="github-link__label">View on GitHub</span>
-              <span className="github-link__repo">github.com/ramz-021002/packet-sniffer</span>
-            </span>
-          </a>
         </div>
         <h1>Network Packet Analyzer</h1>
         <p className="intro">
