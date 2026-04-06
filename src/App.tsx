@@ -311,7 +311,7 @@ function App() {
     <main className="page-shell">
       <header className="hero-banner">
         <div className="hero-top">
-          <p className="eyebrow">Client-side Packet Intelligence</p>
+          <p className="eyebrow">Analyze Network Traffic</p>
           <div className="theme-switch" role="group" aria-label="Color theme">
             <button
               type="button"
