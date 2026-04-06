@@ -12,7 +12,7 @@ export interface GeoDetails {
 
 const geoCache = new Map<string, GeoDetails>()
 
-function isPrivateOrReservedIp(ip: string): boolean {
+export function isPrivateOrReservedIp(ip: string): boolean {
   if (ip === '::1' || ip === '0.0.0.0') {
     return true
   }

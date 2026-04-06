@@ -1,38 +1,131 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import cytoscape, { type Core, type ElementDefinition } from 'cytoscape'
-import { parsePcapFile, type AnalysisResult } from './lib/pcap'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import cytoscape, { type Core, type ElementDefinition, type LayoutOptions } from 'cytoscape'
+import type { CommunicationGraph } from './lib/pcapGraph'
+import { parsePcapFileToGraph } from './lib/pcapGraph'
+import { buildCytoscapeStyles } from './lib/cyTheme'
 import { fetchGeoDetails, formatGeoDetails, type GeoDetails } from './lib/geo'
+import { applyThemeToDocument, getInitialTheme, type UiTheme } from './theme'
+import {
+  buildFlowsCsv,
+  buildGraphJson,
+  buildPublicIpsCsv,
+  downloadDataUrl,
+  downloadTextFile,
+  getPublicGraphNodes,
+} from './lib/exportCapture'
 import './App.css'
+
+function coseLayoutOptions(denseGraphMode: boolean, edgeCount: number): LayoutOptions {
+  const veryDense = edgeCount > 120 || denseGraphMode
+  return {
+    name: 'cose',
+    fit: true,
+    animate: false,
+    idealEdgeLength: veryDense ? 290 : denseGraphMode ? 240 : 170,
+    nodeRepulsion: veryDense ? 480000 : denseGraphMode ? 320000 : 160000,
+    gravity: veryDense ? 0.22 : 0.4,
+    componentSpacing: veryDense ? 160 : denseGraphMode ? 120 : 60,
+    padding: veryDense ? 56 : denseGraphMode ? 44 : 24,
+    nestingFactor: 0.8,
+    numIter: veryDense ? 2200 : 1800,
+  }
+}
 
 function App() {
   const graphContainerRef = useRef<HTMLDivElement | null>(null)
   const graphRef = useRef<Core | null>(null)
-  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null)
+  const cyRef = useRef<Core | null>(null)
+  const [graph, setGraph] = useState<CommunicationGraph | null>(null)
   const [selectedFileName, setSelectedFileName] = useState('')
   const [error, setError] = useState('')
   const [isParsing, setIsParsing] = useState(false)
   const [selectedNodeIp, setSelectedNodeIp] = useState<string | null>(null)
   const [geoDetails, setGeoDetails] = useState<GeoDetails | null>(null)
   const [isFetchingGeo, setIsFetchingGeo] = useState(false)
+  const [theme, setTheme] = useState<UiTheme>(() => getInitialTheme())
+
+  function setUiTheme(next: UiTheme) {
+    setTheme(next)
+    applyThemeToDocument(next)
+  }
 
   const denseGraphMode = useMemo(() => {
-    if (!analysis) {
+    if (!graph) {
       return false
     }
 
-    return analysis.nodes.length > 8 || analysis.conversations.length > 14
-  }, [analysis])
+    return graph.nodes.length > 8 || graph.edges.length > 14
+  }, [graph])
+
+  const layoutOpts = useMemo(() => {
+    if (!graph) {
+      return null
+    }
+    return coseLayoutOptions(denseGraphMode, graph.edges.length)
+  }, [graph, denseGraphMode])
+
+  const runRelayout = useCallback(() => {
+    const cy = cyRef.current
+    const opts = layoutOpts
+    if (!cy || !opts) {
+      return
+    }
+    cy.layout(opts).run()
+  }, [layoutOpts])
+
+  const graphZoomIn = useCallback(() => {
+    const cy = cyRef.current
+    if (!cy) {
+      return
+    }
+    const z = cy.zoom()
+    cy.zoom({ level: Math.min(z * 1.25, cy.maxZoom()), renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } })
+  }, [])
+
+  const graphZoomOut = useCallback(() => {
+    const cy = cyRef.current
+    if (!cy) {
+      return
+    }
+    const z = cy.zoom()
+    cy.zoom({ level: Math.max(z / 1.25, cy.minZoom()), renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } })
+  }, [])
+
+  const graphFit = useCallback(() => {
+    cyRef.current?.fit(undefined, 48)
+  }, [])
+
+  const focusNodeOnGraph = useCallback((ip: string) => {
+    const cy = cyRef.current
+    if (!cy) {
+      return
+    }
+    const node = cy.getElementById(ip)
+    if (node.empty()) {
+      return
+    }
+    cy.batch(() => {
+      cy.nodes().unselect()
+      cy.edges().removeClass('reveal-label')
+      node.select()
+      if (denseGraphMode) {
+        node.addClass('reveal-label')
+      }
+    })
+    cy.animate({ fit: { eles: node, padding: 72 }, duration: 220, easing: 'ease-out-cubic' })
+  }, [denseGraphMode])
 
   useEffect(() => {
-    if (!graphContainerRef.current || !analysis) {
+    if (!graphContainerRef.current || !graph || !layoutOpts) {
       return
     }
 
     graphRef.current?.destroy()
+    cyRef.current = null
 
     const elements: ElementDefinition[] = []
 
-    for (const node of analysis.nodes) {
+    for (const node of graph.nodes) {
       const traffic =
         node.incomingPackets + node.outgoingPackets || node.incomingBytes + node.outgoingBytes
       elements.push({
@@ -48,10 +141,10 @@ function App() {
       })
     }
 
-    for (const flow of analysis.conversations) {
+    for (const flow of graph.edges) {
       elements.push({
         data: {
-          id: `${flow.source}>${flow.target}`,
+          id: flow.id,
           source: flow.source,
           target: flow.target,
           label: `${flow.packets} pkts`,
@@ -65,95 +158,27 @@ function App() {
     graphRef.current = cytoscape({
       container: graphContainerRef.current,
       elements,
-      wheelSensitivity: 0.15,
-      style: [
-        {
-          selector: 'node',
-          style: {
-            label: denseGraphMode ? '' : 'data(label)',
-            'font-family': '"Space Grotesk", sans-serif',
-            'font-size': 13,
-            'font-weight': 700,
-            color: '#0f172a',
-            'text-wrap': 'none',
-            'text-valign': 'bottom',
-            'text-halign': 'center',
-            'text-margin-y': 16,
-            'text-background-color': '#f8fafc',
-            'text-background-opacity': 0.95,
-            'text-background-shape': 'roundrectangle',
-            'text-background-padding': '4px',
-            'background-color': '#0f766e',
-            'border-width': 2,
-            'border-color': '#f1f5f9',
-            width: 'mapData(traffic, 1, 3000, 24, 70)',
-            height: 'mapData(traffic, 1, 3000, 24, 70)',
-          },
-        },
-        {
-          selector: 'edge',
-          style: {
-            label: denseGraphMode ? '' : 'data(label)',
-            'font-family': '"IBM Plex Mono", monospace',
-            'font-size': 10,
-            color: '#0f172a',
-            width: 'mapData(packets, 1, 200, 1, 8)',
-            'line-color': '#0ea5a0',
-            'target-arrow-color': '#0ea5a0',
-            'target-arrow-shape': 'triangle',
-            'curve-style': 'bezier',
-            'arrow-scale': 0.8,
-            'text-background-color': '#ffffff',
-            'text-background-opacity': 0.85,
-            'text-background-padding': '2px',
-          },
-        },
-        {
-          selector: 'node.reveal-label, node:selected',
-          style: {
-            label: 'data(label)',
-          },
-        },
-        {
-          selector: 'edge.reveal-label, edge:selected',
-          style: {
-            label: 'data(label)',
-            'text-background-opacity': 0.95,
-          },
-        },
-        {
-          selector: ':selected',
-          style: {
-            'overlay-opacity': 0,
-            'border-color': '#f97316',
-            'line-color': '#f97316',
-            'target-arrow-color': '#f97316',
-          },
-        },
-      ],
-      layout: {
-        name: 'cose',
-        fit: true,
-        animate: false,
-        idealEdgeLength: denseGraphMode ? 240 : 170,
-        nodeRepulsion: denseGraphMode ? 300000 : 160000,
-        gravity: 0.4,
-        componentSpacing: denseGraphMode ? 120 : 60,
-        padding: denseGraphMode ? 44 : 24,
-      },
+      style: buildCytoscapeStyles(theme, denseGraphMode),
+      layout: layoutOpts,
+      minZoom: 0.12,
+      maxZoom: 3.2,
+      wheelSensitivity: 0.18,
     })
 
     if (graphRef.current) {
       const cy = graphRef.current
+      cyRef.current = cy
 
       cy.on('tap', 'node', (event) => {
-        const nodeIp = event.target.data('id') as string
+        const node = event.target
+        const nodeIp = node.data('id') as string
         if (denseGraphMode) {
-          event.target.toggleClass('reveal-label')
+          node.addClass('reveal-label')
         }
         setSelectedNodeIp(nodeIp)
         setGeoDetails(null)
         setIsFetchingGeo(true)
+        cy.animate({ fit: { eles: node, padding: 72 }, duration: 220, easing: 'ease-out-cubic' })
         void fetchGeoDetails(nodeIp).then((details) => {
           setGeoDetails(details)
           setIsFetchingGeo(false)
@@ -176,24 +201,88 @@ function App() {
     }
 
     return () => {
+      cyRef.current = null
       graphRef.current?.destroy()
       graphRef.current = null
     }
-  }, [analysis, denseGraphMode])
+  }, [graph, denseGraphMode, layoutOpts, theme])
 
   const topTalkers = useMemo(() => {
-    if (!analysis) {
+    if (!graph) {
       return []
     }
 
-    return [...analysis.nodes]
-      .sort((a, b) => {
-        const aTraffic = a.incomingBytes + a.outgoingBytes
-        const bTraffic = b.incomingBytes + b.outgoingBytes
-        return bTraffic - aTraffic
-      })
-      .slice(0, 5)
-  }, [analysis])
+    return [...graph.nodes]
+      .sort((a, b) => b.totalBytes - a.totalBytes)
+      .slice(0, 12)
+  }, [graph])
+
+  const exportBase = useMemo(() => {
+    const stem = selectedFileName.replace(/\.[^.]+$/i, '').trim() || 'capture'
+    const safe = stem.replace(/[^\w\s.-]/g, '_').replace(/\s+/g, '_').slice(0, 96)
+    return safe || 'capture'
+  }, [selectedFileName])
+
+  const publicIpCount = useMemo(() => {
+    if (!graph) {
+      return 0
+    }
+    return getPublicGraphNodes(graph).length
+  }, [graph])
+
+  const downloadPublicIpsCsv = useCallback(() => {
+    if (!graph) {
+      return
+    }
+    downloadTextFile(
+      `${exportBase}_public_ips.csv`,
+      buildPublicIpsCsv(graph),
+      'text/csv;charset=utf-8',
+    )
+  }, [graph, exportBase])
+
+  const downloadFlowsCsv = useCallback(() => {
+    if (!graph) {
+      return
+    }
+    downloadTextFile(
+      `${exportBase}_flows.csv`,
+      buildFlowsCsv(graph),
+      'text/csv;charset=utf-8',
+    )
+  }, [graph, exportBase])
+
+  const downloadGraphJson = useCallback(() => {
+    if (!graph) {
+      return
+    }
+    downloadTextFile(
+      `${exportBase}_graph.json`,
+      buildGraphJson(graph),
+      'application/json;charset=utf-8',
+    )
+  }, [graph, exportBase])
+
+  const downloadGraphPng = useCallback(() => {
+    const cy = cyRef.current
+    if (!cy) {
+      return
+    }
+    const bg = theme === 'dark' ? '#000000' : '#f2f2f6'
+    const dataUrl = cy.png({ full: true, scale: 2, bg })
+    downloadDataUrl(`${exportBase}_graph.png`, dataUrl)
+  }, [exportBase, theme])
+
+  function handleTalkerActivate(ip: string) {
+    focusNodeOnGraph(ip)
+    setSelectedNodeIp(ip)
+    setGeoDetails(null)
+    setIsFetchingGeo(true)
+    void fetchGeoDetails(ip).then((details) => {
+      setGeoDetails(details)
+      setIsFetchingGeo(false)
+    })
+  }
 
   async function handleFileChange(file: File | null) {
     if (!file) {
@@ -206,12 +295,12 @@ function App() {
 
     try {
       const arrayBuffer = await file.arrayBuffer()
-      const result = parsePcapFile(arrayBuffer)
-      setAnalysis(result)
+      const result = parsePcapFileToGraph(arrayBuffer)
+      setGraph(result)
     } catch (caughtError) {
       const message =
         caughtError instanceof Error ? caughtError.message : 'Unknown parsing error occurred.'
-      setAnalysis(null)
+      setGraph(null)
       setError(message)
     } finally {
       setIsParsing(false)
@@ -221,7 +310,27 @@ function App() {
   return (
     <main className="page-shell">
       <header className="hero-banner">
-        <p className="eyebrow">Client-side Packet Intelligence</p>
+        <div className="hero-top">
+          <p className="eyebrow">Client-side Packet Intelligence</p>
+          <div className="theme-switch" role="group" aria-label="Color theme">
+            <button
+              type="button"
+              className={theme === 'light' ? 'is-active' : ''}
+              aria-pressed={theme === 'light'}
+              onClick={() => setUiTheme('light')}
+            >
+              Light
+            </button>
+            <button
+              type="button"
+              className={theme === 'dark' ? 'is-active' : ''}
+              aria-pressed={theme === 'dark'}
+              onClick={() => setUiTheme('dark')}
+            >
+              Dark
+            </button>
+          </div>
+        </div>
         <h1>PCAP Communication Atlas</h1>
         <p className="intro">
           Upload a classic <strong>.pcap</strong> file, decode Ethernet + IPv4 traffic directly in
@@ -250,71 +359,141 @@ function App() {
       {isParsing && <p className="status">Parsing capture...</p>}
       {error && <p className="status error">{error}</p>}
 
-      {analysis && (
+      {graph && (
         <>
           <section className="metrics" aria-label="Capture metrics">
             <article>
               <h2>Packets In File</h2>
-              <p>{analysis.totalPackets}</p>
+              <p>{graph.summary.totalPackets}</p>
             </article>
             <article>
               <h2>IPv4 Packets Seen</h2>
-              <p>{analysis.ipv4Packets}</p>
+              <p>{graph.summary.ipv4Packets}</p>
             </article>
             <article>
               <h2>Graphable Packets</h2>
-              <p>{analysis.processedPackets}</p>
+              <p>{graph.summary.processedPackets}</p>
             </article>
             <article>
               <h2>Conversations</h2>
-              <p>{analysis.conversations.length}</p>
+              <p>{graph.summary.edgeCount}</p>
             </article>
             <article>
               <h2>Unique Hosts</h2>
-              <p>{analysis.nodes.length}</p>
+              <p>{graph.summary.nodeCount}</p>
             </article>
             <article>
               <h2>Traffic Volume</h2>
-              <p>{formatBytes(analysis.bytes)}</p>
+              <p>{formatBytes(graph.summary.bytes)}</p>
             </article>
+          </section>
+
+          <section className="card export-card" aria-label="Export downloads">
+            <h2>Exports</h2>
+            <p className="export-lead">
+              CSV and JSON use UTF-8. Public IPs exclude private, loopback, link-local, and multicast
+              ranges ({publicIpCount} in this capture).
+            </p>
+            <div className="export-actions">
+              <button type="button" className="export-btn" onClick={downloadPublicIpsCsv}>
+                Public IPs (CSV)
+              </button>
+              <button type="button" className="export-btn" onClick={downloadFlowsCsv}>
+                All flows (CSV)
+              </button>
+              <button type="button" className="export-btn" onClick={downloadGraphJson}>
+                Graph (JSON)
+              </button>
+              <button type="button" className="export-btn" onClick={downloadGraphPng}>
+                Graph image (PNG)
+              </button>
+            </div>
           </section>
 
           <section className="grid-layout">
             <article className="card graph-card">
-              <h2>Communication Graph</h2>
-              <p>Nodes are IP addresses. Directed edges represent source-to-destination flows.</p>
+              <div className="graph-card-header">
+                <div>
+                  <h2>Communication Graph</h2>
+                  <p className="graph-card-lead">
+                    Nodes are IPs; arrows follow packet direction. Scroll to zoom, drag the background
+                    to pan.
+                  </p>
+                </div>
+              </div>
               <p className="dense-tip">
                 {denseGraphMode
-                  ? 'Dense mode: Click a node to reveal its IP label (and look up ISP details). Click an edge to show packet count.'
-                  : 'Click a node to look up ISP, domain, and location details.'}
+                  ? 'Dense capture: edges are faded until you select one. Pick a host in the inspector or Top Talkers to zoom in.'
+                  : 'Select a host to see ISP and location in the inspector.'}
               </p>
-              <div ref={graphContainerRef} className="graph-canvas" />
-              {selectedNodeIp && (
-                <article className="geo-detail-panel">
-                  <h3>{selectedNodeIp}</h3>
-                  {isFetchingGeo ? (
-                    <p className="geo-loading">Fetching ISP details...</p>
-                  ) : geoDetails ? (
-                    <pre className="geo-info">{formatGeoDetails(geoDetails)}</pre>
-                  ) : null}
-                </article>
-              )}
+              <div className="graph-workspace">
+                <div className="graph-frame">
+                  <div className="graph-toolbar" role="toolbar" aria-label="Graph view controls">
+                    <button type="button" className="graph-tool-btn" onClick={graphFit} title="Fit all">
+                      Fit
+                    </button>
+                    <button type="button" className="graph-tool-btn" onClick={graphZoomOut} title="Zoom out">
+                      −
+                    </button>
+                    <button type="button" className="graph-tool-btn" onClick={graphZoomIn} title="Zoom in">
+                      +
+                    </button>
+                    <button type="button" className="graph-tool-btn graph-tool-btn--accent" onClick={runRelayout} title="Re-run layout">
+                      Re-layout
+                    </button>
+                    <button
+                      type="button"
+                      className="graph-tool-btn"
+                      onClick={downloadGraphPng}
+                      title="Download graph as PNG"
+                    >
+                      PNG
+                    </button>
+                  </div>
+                  <div ref={graphContainerRef} className="graph-canvas" />
+                </div>
+                <aside className="graph-inspector" aria-label="Host inspector">
+                  <h3 className="inspector-title">Inspector</h3>
+                  {!selectedNodeIp ? (
+                    <p className="inspector-placeholder">
+                      Click a node on the graph or an entry in <strong>Top Talkers</strong> to load ISP
+                      and location details.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="inspector-ip">{selectedNodeIp}</p>
+                      {isFetchingGeo ? (
+                        <p className="geo-loading">Fetching ISP details…</p>
+                      ) : geoDetails ? (
+                        <pre className="geo-info">{formatGeoDetails(geoDetails)}</pre>
+                      ) : null}
+                    </>
+                  )}
+                </aside>
+              </div>
             </article>
 
-            <article className="card">
+            <article className="card talkers-card">
               <h2>Top Talkers</h2>
+              <p className="talkers-lead">By total bytes. Click to focus on the graph.</p>
               <ol className="talker-list">
                 {topTalkers.map((node) => {
-                  const bytes = node.incomingBytes + node.outgoingBytes
+                  const active = selectedNodeIp === node.ip
                   return (
                     <li key={node.ip}>
-                      <div>
-                        <strong>{node.ip}</strong>
-                        <span>{formatBytes(bytes)}</span>
-                      </div>
-                      <small>
-                        {node.outgoingPackets} out / {node.incomingPackets} in packets
-                      </small>
+                      <button
+                        type="button"
+                        className={`talker-row${active ? ' talker-row--active' : ''}`}
+                        onClick={() => handleTalkerActivate(node.ip)}
+                      >
+                        <span className="talker-row-main">
+                          <strong>{node.ip}</strong>
+                          <span className="talker-bytes">{formatBytes(node.totalBytes)}</span>
+                        </span>
+                        <small>
+                          {node.outgoingPackets} out / {node.incomingPackets} in packets
+                        </small>
+                      </button>
                     </li>
                   )
                 })}
