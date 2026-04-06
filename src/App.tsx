@@ -15,6 +15,14 @@ import {
 } from './lib/exportCapture'
 import './App.css'
 
+function GitHubMark() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="github-link__icon">
+      <path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.38 6.84 9.73.5.09.68-.22.68-.48v-1.67c-2.78.62-3.37-1.37-3.37-1.37-.46-1.2-1.13-1.52-1.13-1.52-.92-.65.07-.64.07-.64 1.02.08 1.56 1.07 1.56 1.07.91 1.57 2.4 1.12 2.98.86.09-.68.35-1.12.63-1.38-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.25-.45-1.28.1-2.66 0 0 .84-.28 2.75 1.05a9.18 9.18 0 0 1 5 0c1.9-1.33 2.74-1.05 2.74-1.05.56 1.38.21 2.41.11 2.66.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.69.95.69 1.92v2.84c0 .26.18.57.69.47C19.13 20.63 22 16.78 22 12.25 22 6.58 17.52 2 12 2Z" />
+    </svg>
+  )
+}
+
 function coseLayoutOptions(denseGraphMode: boolean, edgeCount: number): LayoutOptions {
   const veryDense = edgeCount > 120 || denseGraphMode
   return {
@@ -330,6 +338,19 @@ function App() {
               Dark
             </button>
           </div>
+          <a
+            className="github-link"
+            href="https://github.com/ramz-021002/packet-sniffer"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="View packet-sniffer repository on GitHub"
+          >
+            <GitHubMark />
+            <span className="github-link__content">
+              <span className="github-link__label">View on GitHub</span>
+              <span className="github-link__repo">github.com/ramz-021002/packet-sniffer</span>
+            </span>
+          </a>
         </div>
         <h1>Network Packet Analyzer</h1>
         <p className="intro">

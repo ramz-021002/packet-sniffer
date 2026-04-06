@@ -58,6 +58,57 @@
   color: var(--on-accent);
 }
 
+.github-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: linear-gradient(180deg, var(--surface-card), var(--surface-muted));
+  color: var(--text-strong);
+  text-decoration: none;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+  transition:
+    transform 0.14s ease,
+    border-color 0.14s ease,
+    background 0.14s ease;
+}
+
+.github-link:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent);
+  background: var(--surface-card);
+}
+
+.github-link__icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex-shrink: 0;
+  fill: currentColor;
+  color: var(--text-strong);
+}
+
+.github-link__content {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  align-items: flex-start;
+}
+
+.github-link__label {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.github-link__repo {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  word-break: break-all;
+}
+
 .eyebrow {
   text-transform: uppercase;
   letter-spacing: 0.1em;
