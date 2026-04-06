@@ -331,7 +331,7 @@ function App() {
             </button>
           </div>
         </div>
-        <h1>PCAP Communication Atlas</h1>
+        <h1>Network Packet Analyzer</h1>
         <p className="intro">
           Upload a classic <strong>.pcap</strong> file, decode Ethernet + IPv4 traffic directly in
           your browser, and inspect how hosts communicate.
