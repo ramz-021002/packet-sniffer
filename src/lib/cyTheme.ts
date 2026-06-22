@@ -12,6 +12,12 @@ export function buildCytoscapeStyles(
   const nodeFill = isDark ? '#525252' : '#6366f1'
   const nodeBorder = isDark ? '#a3a3a3' : '#818cf8'
 
+  // Role-based palette: internal (your hosts) vs external (public internet)
+  const internalFill = isDark ? '#4338ca' : '#6366f1'
+  const internalBorder = isDark ? '#818cf8' : '#a5b4fc'
+  const externalFill = isDark ? '#0f766e' : '#14b8a6'
+  const externalBorder = isDark ? '#2dd4bf' : '#5eead4'
+
   const edgeLabelColor = isDark ? '#c4c4c4' : '#3f3f46'
   const edgeLine = isDark ? '#404040' : '#a1a1aa'
   const edgeArrow = isDark ? '#5c5c5c' : '#737373'
@@ -39,8 +45,27 @@ export function buildCytoscapeStyles(
         'background-color': nodeFill,
         'border-width': 2,
         'border-color': nodeBorder,
+        shape: 'ellipse',
         width: 'mapData(traffic, 1, 3000, 22, 64)',
         height: 'mapData(traffic, 1, 3000, 22, 64)',
+      },
+    },
+    {
+      // Internal / private hosts — squares
+      selector: 'node[role = "internal"]',
+      style: {
+        shape: 'round-rectangle',
+        'background-color': internalFill,
+        'border-color': internalBorder,
+      },
+    },
+    {
+      // External / public hosts — circles
+      selector: 'node[role = "external"]',
+      style: {
+        shape: 'ellipse',
+        'background-color': externalFill,
+        'border-color': externalBorder,
       },
     },
     {
@@ -93,6 +118,30 @@ export function buildCytoscapeStyles(
         'border-color': '#f59e0b',
         'border-width': 3,
         'background-color': isDark ? '#737373' : '#818cf8',
+      },
+    },
+    // Flag severity — placed after selected so they can still be seen when unselected
+    {
+      selector: 'node.flag-high',
+      style: {
+        'border-color': '#ef4444',
+        'border-width': 4,
+        'background-color': isDark ? '#3b0a0a' : '#fef2f2',
+      },
+    },
+    {
+      selector: 'node.flag-medium',
+      style: {
+        'border-color': '#f59e0b',
+        'border-width': 4,
+        'background-color': isDark ? '#2d1a00' : '#fffbeb',
+      },
+    },
+    {
+      selector: 'node.flag-low',
+      style: {
+        'border-color': '#6366f1',
+        'border-width': 3,
       },
     },
   ]

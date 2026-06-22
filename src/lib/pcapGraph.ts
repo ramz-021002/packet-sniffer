@@ -1,4 +1,6 @@
-import { parsePcapFile, type AnalysisResult, type L4Protocol } from './pcap'
+import { parsePcapFile, type AnalysisResult, type L4Protocol, type PacketRecord } from './pcap'
+
+export type { PacketRecord }
 
 /**
  * Capture-level stats plus graph dimensions. Safe to JSON.stringify for tools / exports.
@@ -40,12 +42,13 @@ export interface GraphEdge {
 }
 
 /**
- * Graph structure for visualization, statistics, or downstream analysis (JSON, graph DB, etc.).
+ * Graph structure for visualization plus per-packet records for inspection.
  */
 export interface CommunicationGraph {
   summary: PcapGraphSummary
   nodes: GraphNode[]
   edges: GraphEdge[]
+  packets: PacketRecord[]
 }
 
 function edgeId(source: string, target: string): string {
@@ -92,6 +95,7 @@ export function analysisToGraph(analysis: AnalysisResult): CommunicationGraph {
     },
     nodes,
     edges,
+    packets: analysis.packets,
   }
 }
 

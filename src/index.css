@@ -42,6 +42,21 @@ html[data-theme='light'] {
   --talker-active-border: #a5b4fc;
   --talker-active-shadow: 0 0 0 1px rgba(79, 70, 229, 0.2);
   --hero-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --row-tcp-bg: rgba(59, 130, 246, 0.035);
+  --row-udp-bg: rgba(34, 197, 94, 0.035);
+  --row-icmp-bg: rgba(245, 158, 11, 0.045);
+  --proto-tcp-bg: rgba(59, 130, 246, 0.12);
+  --proto-tcp-fg: #2563eb;
+  --proto-udp-bg: rgba(34, 197, 94, 0.12);
+  --proto-udp-fg: #16a34a;
+  --proto-icmp-bg: rgba(245, 158, 11, 0.12);
+  --proto-icmp-fg: #b45309;
+  --flag-high-bg: rgba(239, 68, 68, 0.12);
+  --flag-high-fg: #dc2626;
+  --flag-medium-bg: rgba(245, 158, 11, 0.14);
+  --flag-medium-fg: #d97706;
+  --flag-low-bg: rgba(99, 102, 241, 0.12);
+  --flag-low-fg: #4f46e5;
 }
 
 html[data-theme='dark'] {
@@ -82,6 +97,21 @@ html[data-theme='dark'] {
   --talker-active-border: #525252;
   --talker-active-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
   --hero-shadow: 0 1px 0 rgba(255, 255, 255, 0.03);
+  --row-tcp-bg: rgba(59, 130, 246, 0.07);
+  --row-udp-bg: rgba(34, 197, 94, 0.06);
+  --row-icmp-bg: rgba(245, 158, 11, 0.07);
+  --proto-tcp-bg: rgba(59, 130, 246, 0.2);
+  --proto-tcp-fg: #60a5fa;
+  --proto-udp-bg: rgba(34, 197, 94, 0.18);
+  --proto-udp-fg: #4ade80;
+  --proto-icmp-bg: rgba(245, 158, 11, 0.18);
+  --proto-icmp-fg: #fbbf24;
+  --flag-high-bg: rgba(239, 68, 68, 0.18);
+  --flag-high-fg: #f87171;
+  --flag-medium-bg: rgba(245, 158, 11, 0.18);
+  --flag-medium-fg: #fbbf24;
+  --flag-low-bg: rgba(129, 140, 248, 0.18);
+  --flag-low-fg: #a5b4fc;
 }
 
 * {

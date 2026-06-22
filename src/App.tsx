@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import cytoscape, { type Core, type ElementDefinition, type LayoutOptions } from 'cytoscape'
+import cytoscape, { type Core, type ElementDefinition, type LayoutOptions, type NodeSingular } from 'cytoscape'
 import type { CommunicationGraph } from './lib/pcapGraph'
 import { parsePcapFileToGraph } from './lib/pcapGraph'
+import type { PacketRecord } from './lib/pcap'
 import { buildCytoscapeStyles } from './lib/cyTheme'
-import { fetchGeoDetails, formatGeoDetails, type GeoDetails } from './lib/geo'
+import { fetchGeoDetails, formatGeoDetails, isPrivateOrReservedIp, type GeoDetails } from './lib/geo'
 import { applyThemeToDocument, getInitialTheme, type UiTheme } from './theme'
 import {
   buildFlowsCsv,
@@ -13,6 +14,10 @@ import {
   downloadTextFile,
   getPublicGraphNodes,
 } from './lib/exportCapture'
+import { computeFlags, type FlagResult } from './lib/flags'
+import { PacketTable } from './components/PacketTable'
+import { HexDump } from './components/HexDump'
+import { FlagsSummary } from './components/FlagsSummary'
 import './App.css'
 
 function GitHubMark() {
@@ -23,19 +28,24 @@ function GitHubMark() {
   )
 }
 
-function coseLayoutOptions(denseGraphMode: boolean, edgeCount: number): LayoutOptions {
+// Concentric layout: internal (private) hosts form the core, external hosts
+// ring around them. Within a ring, busier hosts sit closer to the front.
+function communicationLayout(denseGraphMode: boolean, edgeCount: number): LayoutOptions {
   const veryDense = edgeCount > 120 || denseGraphMode
   return {
-    name: 'cose',
+    name: 'concentric',
     fit: true,
     animate: false,
-    idealEdgeLength: veryDense ? 290 : denseGraphMode ? 240 : 170,
-    nodeRepulsion: veryDense ? 480000 : denseGraphMode ? 320000 : 160000,
-    gravity: veryDense ? 0.22 : 0.4,
-    componentSpacing: veryDense ? 160 : denseGraphMode ? 120 : 60,
-    padding: veryDense ? 56 : denseGraphMode ? 44 : 24,
-    nestingFactor: 0.8,
-    numIter: veryDense ? 2200 : 1800,
+    padding: veryDense ? 56 : denseGraphMode ? 40 : 28,
+    minNodeSpacing: veryDense ? 40 : denseGraphMode ? 28 : 20,
+    spacingFactor: veryDense ? 1.15 : 1,
+    startAngle: 1.5 * Math.PI,
+    equidistant: false,
+    avoidOverlap: true,
+    // Higher value => closer to the center: internal hosts form the core,
+    // external hosts the surrounding ring. Two distinct values => two rings.
+    concentric: (node: NodeSingular) => (node.data('role') === 'internal' ? 2 : 1),
+    levelWidth: () => 1,
   }
 }
 
@@ -51,6 +61,8 @@ function App() {
   const [geoDetails, setGeoDetails] = useState<GeoDetails | null>(null)
   const [isFetchingGeo, setIsFetchingGeo] = useState(false)
   const [theme, setTheme] = useState<UiTheme>(() => getInitialTheme())
+  const [selectedPacket, setSelectedPacket] = useState<PacketRecord | null>(null)
+  const [flags, setFlags] = useState<FlagResult | null>(null)
 
   function setUiTheme(next: UiTheme) {
     setTheme(next)
@@ -69,7 +81,7 @@ function App() {
     if (!graph) {
       return null
     }
-    return coseLayoutOptions(denseGraphMode, graph.edges.length)
+    return communicationLayout(denseGraphMode, graph.edges.length)
   }, [graph, denseGraphMode])
 
   const runRelayout = useCallback(() => {
@@ -127,6 +139,7 @@ function App() {
     if (!graphContainerRef.current || !graph || !layoutOpts) {
       return
     }
+    // flags intentionally read from closure — listed in deps below
 
     graphRef.current?.destroy()
     cyRef.current = null
@@ -141,6 +154,7 @@ function App() {
           id: node.ip,
           label: node.ip,
           traffic,
+          role: isPrivateOrReservedIp(node.ip) ? 'internal' : 'external',
           incomingPackets: node.incomingPackets,
           outgoingPackets: node.outgoingPackets,
           incomingBytes: node.incomingBytes,
@@ -206,6 +220,19 @@ function App() {
           setGeoDetails(null)
         }
       })
+
+      // Apply flag severity classes to nodes
+      if (flags) {
+        cy.batch(() => {
+          for (const [ip, nodeFlags] of flags.nodeFlags) {
+            const el = cy.getElementById(ip)
+            if (el.empty()) continue
+            const sev = nodeFlags.some(f => f.severity === 'high') ? 'high'
+              : nodeFlags.some(f => f.severity === 'medium') ? 'medium' : 'low'
+            el.addClass(`flag-${sev}`)
+          }
+        })
+      }
     }
 
     return () => {
@@ -213,7 +240,7 @@ function App() {
       graphRef.current?.destroy()
       graphRef.current = null
     }
-  }, [graph, denseGraphMode, layoutOpts, theme])
+  }, [graph, denseGraphMode, layoutOpts, theme, flags])
 
   const topTalkers = useMemo(() => {
     if (!graph) {
@@ -300,11 +327,14 @@ function App() {
     setIsParsing(true)
     setError('')
     setSelectedFileName(file.name)
+    setSelectedPacket(null)
+    setFlags(null)
 
     try {
       const arrayBuffer = await file.arrayBuffer()
       const result = parsePcapFileToGraph(arrayBuffer)
       setGraph(result)
+      setFlags(computeFlags(result))
     } catch (caughtError) {
       const message =
         caughtError instanceof Error ? caughtError.message : 'Unknown parsing error occurred.'
@@ -434,16 +464,52 @@ function App() {
             </div>
           </section>
 
+          {flags && (
+            <FlagsSummary
+              flags={flags}
+              packets={graph.packets}
+              selectedPacketIndex={selectedPacket?.index ?? null}
+              onSelectPacket={setSelectedPacket}
+              onSelectNode={handleTalkerActivate}
+            />
+          )}
+
+          <section className="card packets-card" aria-label="Packet list">
+            <h2>Packets</h2>
+            <p className="packets-lead">
+              All {graph.packets.length.toLocaleString()} IPv4 packets. Filter by protocol, address, or port; click a row to inspect raw bytes.
+            </p>
+            <PacketTable
+              packets={graph.packets}
+              selectedIndex={selectedPacket?.index ?? null}
+              packetFlags={flags?.packetFlags ?? new Map()}
+              onSelect={setSelectedPacket}
+            />
+            {selectedPacket && (
+              <HexDump
+                record={selectedPacket}
+                baseSec={graph.packets[0]?.timestampSec ?? 0}
+                baseUsec={graph.packets[0]?.timestampUsec ?? 0}
+                flags={flags?.packetFlags.get(selectedPacket.index)}
+              />
+            )}
+          </section>
+
           <section className="grid-layout">
             <article className="card graph-card">
               <div className="graph-card-header">
                 <div>
                   <h2>Communication Graph</h2>
                   <p className="graph-card-lead">
-                    Nodes are IPs; arrows follow packet direction. Scroll to zoom, drag the background
-                    to pan.
+                    Internal hosts form the core, external hosts the outer ring. Arrows follow packet
+                    direction. Scroll to zoom, drag the background to pan.
                   </p>
                 </div>
+                <ul className="graph-legend" aria-label="Graph legend">
+                  <li><span className="legend-glyph legend-glyph--internal" aria-hidden="true" />Internal</li>
+                  <li><span className="legend-glyph legend-glyph--external" aria-hidden="true" />External</li>
+                  <li><span className="legend-glyph legend-glyph--flagged" aria-hidden="true" />Flagged</li>
+                </ul>
               </div>
               <p className="dense-tip">
                 {denseGraphMode

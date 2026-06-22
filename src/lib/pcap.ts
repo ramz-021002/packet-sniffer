@@ -1,5 +1,22 @@
 export type L4Protocol = 'TCP' | 'UDP' | 'ICMP' | 'OTHER'
 
+export const PAYLOAD_PREVIEW_BYTES = 256
+
+export interface PacketRecord {
+  index: number
+  timestampSec: number
+  timestampUsec: number
+  src: string
+  srcPort: number | null
+  dst: string
+  dstPort: number | null
+  protocol: L4Protocol
+  ipLength: number
+  tcpFlags: number | null
+  isFragment: boolean
+  payload: Uint8Array
+}
+
 export interface Conversation {
   source: string
   target: string
@@ -24,6 +41,7 @@ export interface AnalysisResult {
   bytes: number
   conversations: Conversation[]
   nodes: HostTraffic[]
+  packets: PacketRecord[]
 }
 
 type Endian = 'little' | 'big'
@@ -63,8 +81,11 @@ export function parsePcapFile(buffer: ArrayBuffer): AnalysisResult {
   }>()
 
   const hosts = new Map<string, HostTraffic>()
+  const packets: PacketRecord[] = []
 
   while (offset + 16 <= view.byteLength) {
+    const tsSec = view.getUint32(offset, littleEndian)
+    const tsUsec = view.getUint32(offset + 4, littleEndian)
     const includedLength = view.getUint32(offset + 8, littleEndian)
     const packetStart = offset + 16
     const packetEnd = packetStart + includedLength
@@ -113,6 +134,41 @@ export function parsePcapFile(buffer: ArrayBuffer): AnalysisResult {
     processedPackets += 1
     bytes += packetBytes
 
+    // Extract L4 ports for TCP and UDP
+    let srcPort: number | null = null
+    let dstPort: number | null = null
+    if ((protocol === 'TCP' || protocol === 'UDP') && packetEnd >= ipStart + ihl + 4) {
+      srcPort = view.getUint16(ipStart + ihl, false)
+      dstPort = view.getUint16(ipStart + ihl + 2, false)
+    }
+
+    // TCP flags byte (offset 13 in TCP header)
+    let tcpFlags: number | null = null
+    if (protocol === 'TCP' && packetEnd >= ipStart + ihl + 14) {
+      tcpFlags = view.getUint8(ipStart + ihl + 13)
+    }
+
+    // IP fragmentation: MF bit (0x2000) or non-zero fragment offset (lower 13 bits)
+    const ipFlagsOffset = view.getUint16(ipStart + 6, false)
+    const isFragment = (ipFlagsOffset & 0x2000) !== 0 || (ipFlagsOffset & 0x1fff) !== 0
+
+    const rawLen = Math.min(packetEnd - ipStart, PAYLOAD_PREVIEW_BYTES)
+    const payload = new Uint8Array(buffer, ipStart, rawLen).slice()
+    packets.push({
+      index: totalPackets,
+      timestampSec: tsSec,
+      timestampUsec: tsUsec,
+      src: source,
+      srcPort,
+      dst: target,
+      dstPort,
+      protocol,
+      ipLength: totalLength,
+      tcpFlags,
+      isFragment,
+      payload,
+    })
+
     const conversationKey = `${source}>${target}`
     const existingConversation = conversations.get(conversationKey)
 
@@ -150,6 +206,7 @@ export function parsePcapFile(buffer: ArrayBuffer): AnalysisResult {
       protocols: [...flow.protocols],
     })),
     nodes: [...hosts.values()],
+    packets,
   }
 }
 
